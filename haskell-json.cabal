@@ -1,0 +1,17 @@
+Name: haskell-json
+Version: 0.0
+Maintainer: Chris Done (chrisdone@gmail.com)
+Author: Chris Done (chrisdone@gmail.com)
+Copyright: 2010 Chris Done
+License: BSD3
+Category: Text, XML, JSON, Web
+Synopsis: Simple online JSON/XML-based Haskell evaluation service
+build-type: Simple
+Cabal-Version: >= 1.2
+
+Executable haskell-json.fcgi
+  Main-is: haskell-json.hs
+--  GHC-Options: -Wall -O2 -threaded
+  GHC-Options: -threaded -O0
+  extensions: TypeSynonymInstances NamedFieldPuns FlexibleInstances UndecidableInstances MultiParamTypeClasses GeneralizedNewtypeDeriving ExistentialQuantification NoMonomorphismRestriction StandaloneDeriving ScopedTypeVariables
+  Build-Depends: base > 4, fastcgi, hjpath, mtl, hint, process, json, safe

@@ -1,0 +1,2 @@
+#lighttpd -f httpd/httpd.conf
+sudo service lighttpd start
