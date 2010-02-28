@@ -53,7 +53,7 @@ mueval expr mueval =
     repl mueval `C.catch` \(e :: C.IOException) -> do
       let (_,_,herr,pid) = mueval
       err <- hGetLine herr `C.catch` \(e :: C.IOException) ->
-                                        return $ "Internal error. Haskell died!" ++ show e
+                                        return $ "Terminated!" ++ show e
       mueval' <- muevalStart
       return (mueval',err)
     where repl mueval@(hin,hout,herr,p) = do
@@ -215,7 +215,7 @@ instance JSON.JSON RPCResult where
     showJSON (RPCEvalException error) = 
         JSON.makeObj $ [("exception",jsonstr error)]
     showJSON RPCEvalInternalError = 
-        JSON.makeObj $ [("internal",jsonstr "Internal error. Haskell died!")]
+        JSON.makeObj $ [("internal",jsonstr "Terminated!")]
 
 -- When a remote procedure call fails, the Procedure Return object MUST contain
 -- the error member whose value is a JSON Object with the following members:
@@ -296,7 +296,7 @@ rpcRespond mvar (Right request) = do
   case JSON.jPath "/expr" $ rpr_params request of
     Right [JSON.JSString (JSON.JSONString expr)] -> do
         result <- liftIO $ modifyMVar mvar (mueval expr)
-        return $ rpcResponse { rps_result = Just $ toResult result
+        return $ rpcResponse { rps_result = Just $ toResult expr result
                              , rps_id     = rpr_id request
                              }
    -- Unable to parse the parameters, fail it.
@@ -308,14 +308,17 @@ rpcRespond mvar (Right request) = do
                               }
 
 -- | Make a JSON result out of a mueval result.
-toResult :: String -> RPCResult
-toResult res =
+toResult :: String -> String -> RPCResult
+toResult expr res =
     case readMay res of
       Just (orig,typ,res) -> RPCEvalSuccess orig typ res
       _ -> case readMay res of
             Just err -> RPCEvalError err
             _  | isPrefixOf pre res -> RPCEvalException (core res)
-               | otherwise                      -> RPCEvalInternalError
+               | otherwise          -> 
+                   case readMay res of
+                     Just x@(_:_) -> RPCEvalSuccess expr "" $ show (x :: [String])
+                     Nothing      -> RPCEvalInternalError
                where core = drop (length pre)
                      pre =  "mueval-core: "
 
