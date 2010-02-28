@@ -54,6 +54,7 @@ mueval expr mueval =
       let (_,_,herr,pid) = mueval
       err <- hGetLine herr `C.catch` \(e :: C.IOException) ->
                                         return $ "Terminated!" ++ show e
+      P.waitForProcess pid
       mueval' <- muevalStart
       return (mueval',err)
     where repl mueval@(hin,hout,herr,p) = do
