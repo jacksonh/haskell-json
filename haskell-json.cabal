@@ -11,7 +11,8 @@ Cabal-Version: >= 1.2
 
 Executable haskell-json.fcgi
   Main-is: haskell-json.hs
+  hs-source-dirs: src
 --  GHC-Options: -Wall -O2 -threaded
   GHC-Options: -threaded -O0
   extensions: TypeSynonymInstances NamedFieldPuns FlexibleInstances UndecidableInstances MultiParamTypeClasses GeneralizedNewtypeDeriving ExistentialQuantification NoMonomorphismRestriction StandaloneDeriving ScopedTypeVariables
-  Build-Depends: base > 4, fastcgi, hjpath, mtl, hint, process, json, safe
+  Build-Depends: base > 4, fastcgi, hjpath, mtl, hint, process, json, safe, haskell-src, cgi, random, containers, cgi-utils, directory
