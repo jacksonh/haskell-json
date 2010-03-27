@@ -13,9 +13,10 @@ import qualified Control.Exception as C
 import qualified Network.FastCGI as CGI
 import qualified Network.CGI.Session as CGI
 import qualified System.Process as P
-import qualified Text.JSON.JPath as JSON
-import qualified Text.JSON.Types as JSON
-import qualified Text.JSON as JSON
+import qualified Text.HJson as HJson
+import qualified Text.JSON.JPath as JSON (jPath)
+import qualified Text.JSON.Types as JSON (JSValue(..))
+import qualified Text.JSON as JSON (makeObj,encode,toJSString,JSON(..))
 import qualified Language.Haskell.Parser as HS
 import qualified Language.Haskell.Syntax as HS
 import qualified Language.Haskell.Pretty as HS
@@ -350,7 +351,7 @@ rpcRespond mvar (Right request)
 
 loadRespond mvar request = 
   case JSON.jPath "/contents" $ rpr_params request of
-    Right [JSON.JSString (JSON.JSONString exprs)] -> do
+    Right [(HJson.JString exprs)] -> do
         result <- loadModule mvar exprs
         return $ rpcResponse { rps_result = Just result
                              , rps_id     = rpr_id request
@@ -383,7 +384,7 @@ loadResult e     = RPCLoadGenericError e
 
 evalRespond mvar request = 
   case JSON.jPath "/expr" $ rpr_params request of
-    Right [JSON.JSString (JSON.JSONString expr)] | not $ ":l " `isPrefixOf` expr -> do
+    Right [(HJson.JString expr)] | not $ ":l " `isPrefixOf` expr -> do
         path <- sessionFile
         result <- liftIO $ modifyMVar mvar $ muevalEval path expr
         return $ rpcResponse { rps_result = Just $ toResult expr result

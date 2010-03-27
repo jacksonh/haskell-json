@@ -1,1 +1,5 @@
-res/*.hs
+res
+*.hi
+*.o
+.gitignore~
+dist
