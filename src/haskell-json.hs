@@ -1,6 +1,7 @@
 module Main where
 
 import Control.Applicative
+import Control.Concurrent
 import Control.Concurrent.MVar
 import qualified Control.Exception as C
 import Control.Monad.Trans
@@ -154,6 +155,18 @@ muevalStart = do (Just hin,Just hout,Just herr,p)
                  return (hin,hout,herr,p)
                  where path = "/home/chris/.cabal/bin/mueval-core"
 
+-- main = do args <- getArgs
+--           hdl <- runProcess "mueval-core" args Nothing Nothing 
+--                             Nothing Nothing Nothing
+--           forkIO (do threadDelay (7 * 700000)
+--                      status <- getProcessExitCode hdl
+--                      case status of
+--                          Nothing -> terminateProcess hdl >> 
+--                                     exitWith (ExitFailure 1)
+--                          Just a -> exitWith a)
+--           stat <- waitForProcess hdl
+--           exitWith stat
+
 -- | Send an expression to mueval, return the result or error message.
 run :: String -> Mueval -> IO (Mueval,String)
 run expr mueval' =
@@ -164,8 +177,19 @@ run expr mueval' =
       waitForProcess pid
       mueval'' <- muevalStart
       return (mueval'',err)
-    where repl mueval''@(hin,hout,_,_) = do
-            hPutStrLn hin expr; hGetLine hout >>= return . (,) mueval''
+    where repl mueval''@(hin,hout,_,p) = do
+            didRespond <- newEmptyMVar
+            hPutStrLn hin expr
+            tid <- myThreadId
+            forkIO $ do threadDelay (1000 * 750 * 1)
+                        isempty <- isEmptyMVar didRespond
+                        if isempty
+                           then do terminateProcess p
+                                   throwTo tid (userError "Took too long.")
+                           else return ()
+            ret <- hGetLine hout >>= return . (,) mueval''
+            putMVar didRespond ()
+            return ret
 
 -- | Wrapper around the mueval function to ensure the session file is loaded.
 eval :: MVar Mueval -> String -> String -> SessionM String
