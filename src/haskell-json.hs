@@ -78,7 +78,7 @@ validToplevelExprs :: String -> Either String String
 validToplevelExprs expr = do
   let r = parseModuleWithMode defaultParseMode
                                  { parseFilename = "Try Haskell Source" }
-                                 ("module TryHaskell where " ++ expr)
+                                 ("module TryHaskell where\n" ++ expr)
   case r of
     ParseFailed{} -> Left "Parse failed."
     ParseOk (HsModule loc mn n _ exprs) ->
