@@ -4,6 +4,7 @@ import Control.Applicative
 import Control.Concurrent.MVar
 import qualified Control.Exception as C
 import Control.Monad.Trans
+import Data.Char
 import Data.List
 import Language.Haskell.Parser
 import Language.Haskell.Syntax
@@ -114,7 +115,8 @@ sessionFile :: Maybe String -> SessionM String
 sessionFile guid = do
   dir <- lift $ (++"/res/") . maybe "" id <$> getVar "DOCUMENT_ROOT"
   (dir++) . (++".hs") . (++guid') . show <$> sessionId
-      where guid' = maybe "" id guid
+      where guid' = maybe "" (takeWhile valid) guid
+            valid c = isLetter c || isDigit c
 
 -- | Ensure a computation has a param.
 withParam :: String -> (String -> SessionM CGIResult) -> SessionM CGIResult
