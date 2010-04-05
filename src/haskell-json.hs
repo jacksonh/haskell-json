@@ -60,10 +60,13 @@ loadModule mvar contents = do
   case validToplevelExprs contents of
     Right m -> do guid <- lift $ getInput "guid"
                   path <- sessionFile guid
-                  liftIO . writeFile path $ m
+                  liftIO . writeFile path . limitFileContents $ m
                   result <- liftIO . modifyMVar mvar . run $ ":l " ++ path
                   respond $ loadResult result
     Left e -> respond [("error",e)]
+
+limitFileContents :: String -> String
+limitFileContents = take (1024 * 20) -- 20KB
 
 -- | Make a JSON result out of a mueval load result.
 loadResult :: String -> [(String,String)]
@@ -126,7 +129,10 @@ withParam n m = do
 
 -- | Simple responder (in JSON format).
 respond :: [(String,String)] -> SessionM CGIResult
-respond = lift . output . toJson
+respond r = do
+  func <- lift $ getInput "pad"
+  let pad it = maybe it (\f -> f ++ "(" ++ it ++ ")") func
+  lift . output . pad . toJson $ r
 
 -- | Convert an alist to a json object.
 toJson :: [(String,String)] -> String
