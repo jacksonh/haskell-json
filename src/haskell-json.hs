@@ -8,9 +8,9 @@ import qualified Control.Exception       as C
 import "mtl" Control.Monad.Trans         (liftIO,lift)
 import Data.Char                         (isLetter,isDigit)
 import Data.List                         (isPrefixOf,intercalate)
-import qualified Language.Haskell.Parser as HP
-import qualified Language.Haskell.Syntax as HS
-import qualified Language.Haskell.Pretty as HPP
+import qualified Language.Haskell.Exts.Parser as HP
+import qualified Language.Haskell.Exts.Syntax as HS
+import qualified Language.Haskell.Exts.Pretty as HPP
 import Network.FastCGI                   (CGIResult)
 import qualified Network.FastCGI         as CGI
 import Network.CGI.Session               (SessionM)
@@ -88,20 +88,21 @@ validToplevelExprs expr = do
                                 ("module TryHaskell where\n" ++ expr)
   case r of
     HP.ParseFailed{} -> Left "Parse failed."
-    HP.ParseOk (HS.HsModule loc mn n _ exprs) ->
-        case all valid exprs of
-          True -> Right $ HPP.prettyPrint $ HS.HsModule loc mn n [] exprs
+    HP.ParseOk (HS.Module loc mn _ _ _ _ decls) ->
+        case all valid decls of
+          True -> Right $
+                    HPP.prettyPrint $ HS.Module loc mn [] Nothing Nothing [] decls
           False -> Left $ "Invalid top-level expression." ++ show r
    where valid expr' =
              case expr' of
-               HS.HsPatBind{} -> True
-               HS.HsFunBind{} -> True
-               HS.HsDataDecl{} -> True
-               HS.HsClassDecl{} -> True
-               HS.HsInstDecl{} -> True
-               HS.HsTypeDecl{} -> True
-               HS.HsNewTypeDecl{} -> True
-               HS.HsTypeSig{} -> True
+               HS.PatBind{} -> True
+               HS.FunBind{} -> True
+               HS.DataDecl{} -> True
+               HS.ClassDecl{} -> True
+               HS.InstDecl{} -> True
+               HS.TypeDecl{} -> True
+--               HS.NewTypeDecl{} -> True
+               HS.TypeSig{} -> True
                _ -> False
 
 -- | Convert a mueval error to a JSON response.
