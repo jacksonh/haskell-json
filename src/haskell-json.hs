@@ -1,23 +1,30 @@
 {-# LANGUAGE PackageImports, ScopedTypeVariables #-}
 module Main where
 
-import Control.Applicative
-import Control.Concurrent
-import Control.Concurrent.MVar
+import Control.Applicative              ((<$>))
+import Control.Concurrent               (MVar,modifyMVar,putMVar,throwTo,
+                                         isEmptyMVar,threadDelay,myThreadId,
+                                         forkIO,newEmptyMVar,newMVar)
 import qualified Control.Exception as C
-import "mtl" Control.Monad.Trans
-import Data.Char
-import Data.List
-import Language.Haskell.Parser
-import Language.Haskell.Syntax
-import Language.Haskell.Pretty
-import Network.FastCGI
-import Network.CGI.Session
-import System.Process
-import System.IO
-import System.Directory
-import Text.JSON.Generic
-import System.Environment (getEnvironment)
+import "mtl" Control.Monad.Trans        (liftIO,lift)
+import Data.Char                        (isLetter,isDigit)
+import Data.List                        (isPrefixOf,intercalate)
+import Language.Haskell.Parser          (parseModuleWithMode,defaultParseMode,
+                                         ParseResult(..),parseFilename)
+import Language.Haskell.Syntax          (HsDecl(..),HsModule(..))
+import Language.Haskell.Pretty          (prettyPrint)
+import Network.FastCGI                  (output,getInput,getVar,CGIResult,
+                                          runFastCGI,setHeader)
+import Network.CGI.Session              (SessionM,sessionId,runSessionCGI)
+import System.Process                   (terminateProcess,ProcessHandle,proc,
+                                         std_in,std_out,std_err,
+                                         waitForProcess,createProcess,
+                                         StdStream(CreatePipe))
+import System.IO                        (BufferMode(NoBuffering),Handle,
+                                         hGetLine,hSetBuffering,hPutStrLn)
+import System.Directory                 (doesFileExist)
+import System.Environment               (getEnvironment)
+import Text.JSON.Generic                (encodeJSON)
 
 -- | FastCGI response stuff.
 main :: IO ()
