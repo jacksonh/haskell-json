@@ -17,11 +17,14 @@ import System.Process
 import System.IO
 import System.Directory
 import Text.JSON.Generic
+import System.Environment (getEnvironment)
 
 -- | FastCGI response stuff.
 main :: IO ()
 main = do
-  mueval <- muevalStart >>= newMVar
+  path <- maybe (error "mueval-core path required") id . lookup "MUEVAL_CORE"
+          <$> getEnvironment
+  mueval <- muevalStart path >>= newMVar
   runSessionCGI "HASKELLJSON" runFastCGI $ do
          lift $ setHeader "Content-Type" "text/plain"
          method <- lift $ getInput "method"
@@ -34,7 +37,7 @@ main = do
 --   Parameters: expr
 --   Returns: {"result":"10","type":"Int","expr":"5*2"} or failure
 evalExpr :: MVar Mueval -> SessionM CGIResult
-evalExpr mu =
+evalExpr mu = do
     withParam "expr" $ \expr -> do
       if isPrefixOf ":l " expr
          then respond [("error","<no location info>: parse error on input `:'")]
@@ -143,30 +146,30 @@ toJson = braces . intercalate "," . map jsonIt where
     braces x = "{" ++ x ++ "}"
 
 -- | Mueval evaluation handle.
-type Mueval = (Handle,Handle,Handle,ProcessHandle)
+type Mueval = (Handle,Handle,Handle,ProcessHandle,FilePath)
 
 -- | Launch the mueval piped process.
-muevalStart :: IO Mueval
-muevalStart = do (Just hin,Just hout,Just herr,p)
-                      <- createProcess (proc path ["-r"])
-                   { std_in = CreatePipe
-                   , std_out = CreatePipe
-                   , std_err = CreatePipe }
-                 mapM_ (flip hSetBuffering NoBuffering) [hin,hout,herr]
-                 return (hin,hout,herr,p)
-                 where path = "/home/chris/.cabal/bin/mueval-core"
+muevalStart :: FilePath -> IO Mueval
+muevalStart path =
+    do (Just hin,Just hout,Just herr,p)
+           <- createProcess (proc path ["-r"])
+              { std_in = CreatePipe
+              , std_out = CreatePipe
+              , std_err = CreatePipe }
+       mapM_ (flip hSetBuffering NoBuffering) [hin,hout,herr]
+       return (hin,hout,herr,p,path)
 
 -- | Send an expression to mueval, return the result or error message.
 run :: String -> Mueval -> IO (Mueval,String)
 run expr mueval' =
     repl mueval' `C.catch` \(_ :: C.IOException) -> do
-      let (_,_,herr,pid) = mueval'
-      err <- hGetLine herr `C.catch` \(e :: C.IOException) ->
-                                        return $ "Terminated!" ++ show e
+      let (_,_,herr,pid,path) = mueval'
+      err <- hGetLine herr `C.catch` \(_ :: C.IOException) ->
+                                        return $ "Terminated!"
       waitForProcess pid
-      mueval'' <- muevalStart
+      mueval'' <- muevalStart path
       return (mueval'',err)
-    where repl mueval''@(hin,hout,_,p) = do
+    where repl mueval''@(hin,hout,_,p,_) = do
             didRespond <- newEmptyMVar
             hPutStrLn hin expr
             tid <- myThreadId
