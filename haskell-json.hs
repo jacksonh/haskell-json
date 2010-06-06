@@ -1,25 +1,25 @@
 {-# LANGUAGE PackageImports, ScopedTypeVariables #-}
 module Main where
 
-import Control.Applicative               ((<$>))
-import Control.Concurrent                (MVar)
-import qualified Control.Concurrent      as V
-import qualified Control.Exception       as C
-import "mtl" Control.Monad.Trans         (liftIO,lift)
-import Data.Char                         (isLetter,isDigit)
-import Data.List                         (isPrefixOf,intercalate)
+import Control.Applicative                    ((<$>))
+import Control.Concurrent                     (MVar)
+import qualified Control.Concurrent           as V
+import qualified Control.Exception            as C
+import "mtl" Control.Monad.Trans              (liftIO,lift)
+import Data.Char                              (isLetter,isDigit)
+import Data.List                              (isPrefixOf,intercalate)
 import qualified Language.Haskell.Exts.Parser as HP
 import qualified Language.Haskell.Exts.Syntax as HS
 import qualified Language.Haskell.Exts.Pretty as HPP
-import Network.FastCGI                   (CGIResult)
-import qualified Network.FastCGI         as CGI
-import Network.CGI.Session               (SessionM)
-import qualified Network.CGI.Session     as CGIS
-import System.Process                    as P
-import System.IO                         as IO
-import System.Directory                  (doesFileExist)
-import System.Environment                (getEnvironment)
-import Text.JSON.Generic                 (encodeJSON)
+import Network.FastCGI                        (CGIResult)
+import qualified Network.FastCGI              as CGI
+import Network.CGI.Session                    (SessionM)
+import qualified Network.CGI.Session          as CGIS
+import System.Process                         as P
+import System.IO                              as IO
+import System.Directory                       (doesFileExist)
+import System.Environment                     (getEnvironment)
+import Text.JSON.Generic                      (encodeJSON)
 
 -- | FastCGI response stuff.
 main :: IO ()
@@ -101,7 +101,6 @@ validToplevelExprs expr = do
                HS.ClassDecl{} -> True
                HS.InstDecl{} -> True
                HS.TypeDecl{} -> True
---               HS.NewTypeDecl{} -> True
                HS.TypeSig{} -> True
                _ -> False
 
