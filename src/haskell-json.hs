@@ -1,10 +1,11 @@
+{-# LANGUAGE PackageImports, ScopedTypeVariables #-}
 module Main where
 
 import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.MVar
 import qualified Control.Exception as C
-import Control.Monad.Trans
+import "mtl" Control.Monad.Trans
 import Data.Char
 import Data.List
 import Language.Haskell.Parser
@@ -154,18 +155,6 @@ muevalStart = do (Just hin,Just hout,Just herr,p)
                  mapM_ (flip hSetBuffering NoBuffering) [hin,hout,herr]
                  return (hin,hout,herr,p)
                  where path = "/home/chris/.cabal/bin/mueval-core"
-
--- main = do args <- getArgs
---           hdl <- runProcess "mueval-core" args Nothing Nothing 
---                             Nothing Nothing Nothing
---           forkIO (do threadDelay (7 * 700000)
---                      status <- getProcessExitCode hdl
---                      case status of
---                          Nothing -> terminateProcess hdl >> 
---                                     exitWith (ExitFailure 1)
---                          Just a -> exitWith a)
---           stat <- waitForProcess hdl
---           exitWith stat
 
 -- | Send an expression to mueval, return the result or error message.
 run :: String -> Mueval -> IO (Mueval,String)
