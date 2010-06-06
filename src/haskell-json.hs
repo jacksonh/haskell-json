@@ -1,40 +1,35 @@
 {-# LANGUAGE PackageImports, ScopedTypeVariables #-}
 module Main where
 
-import Control.Applicative              ((<$>))
-import Control.Concurrent               (MVar,modifyMVar,putMVar,throwTo,
-                                         isEmptyMVar,threadDelay,myThreadId,
-                                         forkIO,newEmptyMVar,newMVar)
-import qualified Control.Exception as C
-import "mtl" Control.Monad.Trans        (liftIO,lift)
-import Data.Char                        (isLetter,isDigit)
-import Data.List                        (isPrefixOf,intercalate)
-import Language.Haskell.Parser          (parseModuleWithMode,defaultParseMode,
-                                         ParseResult(..),parseFilename)
-import Language.Haskell.Syntax          (HsDecl(..),HsModule(..))
-import Language.Haskell.Pretty          (prettyPrint)
-import Network.FastCGI                  (output,getInput,getVar,CGIResult,
-                                          runFastCGI,setHeader)
-import Network.CGI.Session              (SessionM,sessionId,runSessionCGI)
-import System.Process                   (terminateProcess,ProcessHandle,proc,
-                                         std_in,std_out,std_err,
-                                         waitForProcess,createProcess,
-                                         StdStream(CreatePipe))
-import System.IO                        (BufferMode(NoBuffering),Handle,
-                                         hGetLine,hSetBuffering,hPutStrLn)
-import System.Directory                 (doesFileExist)
-import System.Environment               (getEnvironment)
-import Text.JSON.Generic                (encodeJSON)
+import Control.Applicative               ((<$>))
+import Control.Concurrent                (MVar)
+import qualified Control.Concurrent      as V
+import qualified Control.Exception       as C
+import "mtl" Control.Monad.Trans         (liftIO,lift)
+import Data.Char                         (isLetter,isDigit)
+import Data.List                         (isPrefixOf,intercalate)
+import qualified Language.Haskell.Parser as HP
+import qualified Language.Haskell.Syntax as HS
+import qualified Language.Haskell.Pretty as HPP
+import Network.FastCGI                   (CGIResult)
+import qualified Network.FastCGI         as CGI
+import Network.CGI.Session               (SessionM)
+import qualified Network.CGI.Session     as CGIS
+import System.Process                    as P
+import System.IO                         as IO
+import System.Directory                  (doesFileExist)
+import System.Environment                (getEnvironment)
+import Text.JSON.Generic                 (encodeJSON)
 
 -- | FastCGI response stuff.
 main :: IO ()
 main = do
   path <- maybe (error "mueval-core path required") id . lookup "MUEVAL_CORE"
           <$> getEnvironment
-  mueval <- muevalStart path >>= newMVar
-  runSessionCGI "HASKELLJSON" runFastCGI $ do
-         lift $ setHeader "Content-Type" "text/plain"
-         method <- lift $ getInput "method"
+  mueval <- muevalStart path >>= V.newMVar
+  CGIS.runSessionCGI "HASKELLJSON" CGI.runFastCGI $ do
+         lift $ CGI.setHeader "Content-Type" "text/plain"
+         method <- lift $ CGI.getInput "method"
          case method of
            Just "eval" -> evalExpr mueval
            Just "load" -> loadFile mueval
@@ -48,7 +43,7 @@ evalExpr mu = do
     withParam "expr" $ \expr -> do
       if isPrefixOf ":l " expr
          then respond [("error","<no location info>: parse error on input `:'")]
-         else do guid <- lift $ getInput "guid"
+         else do guid <- lift $ CGI.getInput "guid"
                  path <- sessionFile guid
                  result <- eval mu path expr
                  respondResult result
@@ -70,10 +65,10 @@ loadFile mvar =
 loadModule :: MVar Mueval -> String -> SessionM CGIResult
 loadModule mvar contents = do
   case validToplevelExprs contents of
-    Right m -> do guid <- lift $ getInput "guid"
+    Right m -> do guid <- lift $ CGI.getInput "guid"
                   path <- sessionFile guid
                   liftIO . writeFile path . limitFileContents $ m
-                  result <- liftIO . modifyMVar mvar . run $ ":l " ++ path
+                  result <- liftIO . V.modifyMVar mvar . run $ ":l " ++ path
                   respond $ loadResult result
     Left e -> respond [("error",e)]
 
@@ -88,25 +83,25 @@ loadResult e     = [("error",e)]
 -- | Check a module only has the whitelisted top-level declarations.
 validToplevelExprs :: String -> Either String String
 validToplevelExprs expr = do
-  let r = parseModuleWithMode defaultParseMode
-                                 { parseFilename = "Try Haskell Source" }
-                                 ("module TryHaskell where\n" ++ expr)
+  let r = HP.parseModuleWithMode HP.defaultParseMode
+                                { HP.parseFilename = "Try Haskell Source" }
+                                ("module TryHaskell where\n" ++ expr)
   case r of
-    ParseFailed{} -> Left "Parse failed."
-    ParseOk (HsModule loc mn n _ exprs) ->
+    HP.ParseFailed{} -> Left "Parse failed."
+    HP.ParseOk (HS.HsModule loc mn n _ exprs) ->
         case all valid exprs of
-          True -> Right $ prettyPrint $ HsModule loc mn n [] exprs
+          True -> Right $ HPP.prettyPrint $ HS.HsModule loc mn n [] exprs
           False -> Left $ "Invalid top-level expression." ++ show r
    where valid expr' =
              case expr' of
-               HsPatBind{} -> True
-               HsFunBind{} -> True
-               HsDataDecl{} -> True
-               HsClassDecl{} -> True
-               HsInstDecl{} -> True
-               HsTypeDecl{} -> True
-               HsNewTypeDecl{} -> True
-               HsTypeSig{} -> True
+               HS.HsPatBind{} -> True
+               HS.HsFunBind{} -> True
+               HS.HsDataDecl{} -> True
+               HS.HsClassDecl{} -> True
+               HS.HsInstDecl{} -> True
+               HS.HsTypeDecl{} -> True
+               HS.HsNewTypeDecl{} -> True
+               HS.HsTypeSig{} -> True
                _ -> False
 
 -- | Convert a mueval error to a JSON response.
@@ -128,23 +123,23 @@ readMay s = case [x | (x,t) <- reads s, ("","") <- lex t] of
 -- | Generate a filename from the user's session id.
 sessionFile :: Maybe String -> SessionM String
 sessionFile guid = do
-  dir <- lift $ (++"/res/") . maybe "" id <$> getVar "DOCUMENT_ROOT"
-  (dir++) . (++".hs") . (++guid') . show <$> sessionId
+  dir <- lift $ (++"/res/") . maybe "" id <$> CGI.getVar "DOCUMENT_ROOT"
+  (dir++) . (++".hs") . (++guid') . show <$> CGIS.sessionId
       where guid' = maybe "" (takeWhile valid) guid
             valid c = isLetter c || isDigit c
 
 -- | Ensure a computation has a param.
 withParam :: String -> (String -> SessionM CGIResult) -> SessionM CGIResult
 withParam n m = do
-  v <- lift $ getInput n
+  v <- lift $ CGI.getInput n
   maybe (respond [("error","Invalid parameters.")]) m v
 
 -- | Simple responder (in JSON format).
 respond :: [(String,String)] -> SessionM CGIResult
 respond r = do
-  func <- lift $ getInput "pad"
+  func <- lift $ CGI.getInput "pad"
   let pad it = maybe it (\f -> f ++ "(" ++ it ++ ")") func
-  lift . output . pad . toJson $ r
+  lift . CGI.output . pad . toJson $ r
 
 -- | Convert an alist to a json object.
 toJson :: [(String,String)] -> String
@@ -177,17 +172,17 @@ run expr mueval' =
       mueval'' <- muevalStart path
       return (mueval'',err)
     where repl mueval''@(hin,hout,_,p,_) = do
-            didRespond <- newEmptyMVar
+            didRespond <- V.newEmptyMVar
             hPutStrLn hin expr
-            tid <- myThreadId
-            forkIO $ do threadDelay (1000 * 750 * 1)
-                        isempty <- isEmptyMVar didRespond
-                        if isempty
-                           then do terminateProcess p
-                                   throwTo tid (userError "Took too long.")
-                           else return ()
+            tid <- V.myThreadId
+            V.forkIO $ do V.threadDelay (1000 * 750 * 1)
+                          isempty <- V.isEmptyMVar didRespond
+                          if isempty
+                             then do terminateProcess p
+                                     V.throwTo tid (userError "Took too long.")
+                             else return ()
             ret <- hGetLine hout >>= return . (,) mueval''
-            putMVar didRespond ()
+            V.putMVar didRespond ()
             return ret
 
 -- | Wrapper around the mueval function to ensure the session file is loaded.
@@ -195,9 +190,9 @@ eval :: MVar Mueval -> String -> String -> SessionM String
 eval mvar path expr = liftIO $ do
   pathexists <- doesFileExist path
   if pathexists
-     then liftIO $ modifyMVar mvar $ \mu -> do
+     then liftIO $ V.modifyMVar mvar $ \mu -> do
             (mu',_) <- run (":l " ++ path) mu
             run expr mu'
-     else liftIO $ modifyMVar mvar $ \mu -> do
+     else liftIO $ V.modifyMVar mvar $ \mu -> do
             (mu',_) <- run (":reset") mu
             run expr mu'
