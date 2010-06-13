@@ -237,7 +237,9 @@ eval mvar path expr bindings = liftIO $ do
   bs <- fmap (M.lookup path) $ V.readMVar bindings
   let exprWithBindings =
         case HP.parseExp expr of
-          HP.ParseOk e     -> HPP.prettyPrint $ maybe e (withBindings e) bs
+          HP.ParseOk e     -> prettyPrint $ maybe e (withBindings e) bs
+            where prettyPrint = HPP.prettyPrintWithMode mode
+                  mode = HPP.defaultMode { HPP.layout = HPP.PPNoLayout }
           HP.ParseFailed{} -> expr
       preparedEval arg = V.modifyMVar mvar (\mu -> do
                            (mu',_) <- run arg mu
