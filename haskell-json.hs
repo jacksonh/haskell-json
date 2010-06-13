@@ -52,12 +52,12 @@ evalExpr mu bindings = do
          else do guid <- lift $ CGI.getInput "guid"
                  path <- sessionFile guid
                  result <- evalOrBind mu path expr bindings
-                 respondResult result
+                 respondResult result expr
 
-respondResult :: String -> SessionM CGIResult
-respondResult result = do
+respondResult :: String -> String -> SessionM CGIResult
+respondResult result expr = do
   case readMay result of
-    Just (orig,typ,res) -> respond [("result",res),("type",typ),("expr",orig)]
+    Just (_::String,typ,res) -> respond [("result",res),("type",typ),("expr",expr)]
     Nothing             ->
       case result of
         "bind" -> respond [("bind","OK.")]
