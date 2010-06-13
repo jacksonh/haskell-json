@@ -66,14 +66,21 @@ respondResult result = do
 -- | Either evaluate an expression or bind a top-level variable.
 evalOrBind :: MVar Mueval -> String -> String -> MVar Bindings -> SessionM String
 evalOrBind mu path expr bindings
-  | HP.ParseOk decl <- HP.parseDecl expr = bind path decl bindings
+  | HP.ParseOk decl <- HP.parseDecl expr = bind mu path decl bindings
   | otherwise                            = eval mu path expr bindings
 
 -- | Bind a top-level declaration into the session state.
-bind :: String -> HS.Decl -> MVar Bindings -> SessionM String
-bind uid decl bindings = do
+bind :: MVar Mueval -> String -> HS.Decl -> MVar Bindings -> SessionM String
+bind mu uid decl bindings = do
+  currentBs <- liftIO $ V.readMVar bindings
   liftIO $ V.modifyMVar_ bindings (return . updateBindings uid decl)
-  return "bind"
+  -- Just to check that their bindings were in scope/type correct:
+  result <- eval mu uid "()" bindings
+  case readMay result of
+    Just (_::String,"()","()") -> return "bind"
+    -- If incorrect just reset the bindings and return the error:
+    _            -> do liftIO $ V.modifyMVar_ bindings (return . const currentBs)
+                       return result
 
 updateBindings :: String -> HS.Decl -> Bindings -> Bindings
 updateBindings uid decl = M.insertWith' update uid initial where
