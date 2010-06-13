@@ -1,4 +1,4 @@
-{-# LANGUAGE PackageImports, ScopedTypeVariables #-}
+{-# LANGUAGE PackageImports, ScopedTypeVariables, PatternGuards #-}
 module Main where
 
 import Control.Applicative                    ((<$>))
@@ -8,6 +8,8 @@ import qualified Control.Exception            as C
 import "mtl" Control.Monad.Trans              (liftIO,lift)
 import Data.Char                              (isLetter,isDigit)
 import Data.List                              (isPrefixOf,intercalate)
+import Data.Map                               (Map)
+import qualified Data.Map                     as M
 import qualified Language.Haskell.Exts.Parser as HP
 import qualified Language.Haskell.Exts.Syntax as HS
 import qualified Language.Haskell.Exts.Pretty as HPP
@@ -27,31 +29,75 @@ main = do
   path <- maybe (error "mueval-core path required") id . lookup "MUEVAL_CORE"
           <$> getEnvironment
   mueval <- muevalStart path >>= V.newMVar
+  bindings <- V.newMVar M.empty
   CGIS.runSessionCGI "HASKELLJSON" CGI.runFastCGI $ do
          lift $ CGI.setHeader "Content-Type" "text/plain"
          method <- lift $ CGI.getInput "method"
          case method of
-           Just "eval" -> evalExpr mueval
+           Just "eval" -> evalExpr mueval bindings
            Just "load" -> loadFile mueval
            _           -> respond [("error","Unknown method.")]
+
+-- | A binding from an evaluation state to a set of bindings.
+type Bindings = Map String HS.Exp
 
 -- | Method: eval
 --   Parameters: expr
 --   Returns: {"result":"10","type":"Int","expr":"5*2"} or failure
-evalExpr :: MVar Mueval -> SessionM CGIResult
-evalExpr mu = do
+evalExpr :: MVar Mueval -> MVar Bindings -> SessionM CGIResult
+evalExpr mu bindings = do
     withParam "expr" $ \expr -> do
       if isPrefixOf ":l " expr
          then respond [("error","<no location info>: parse error on input `:'")]
          else do guid <- lift $ CGI.getInput "guid"
                  path <- sessionFile guid
-                 result <- eval mu path expr
+                 result <- evalOrBind mu path expr bindings
                  respondResult result
-    where respondResult result = do
-            case readMay result of
-              Just (orig,typ,res) ->
-                  respond [("result",res),("type",typ),("expr",orig)]
-              Nothing             -> respond $ errorResponse result
+
+respondResult :: String -> SessionM CGIResult
+respondResult result = do
+  case readMay result of
+    Just (orig,typ,res) -> respond [("result",res),("type",typ),("expr",orig)]
+    Nothing             ->
+      case result of
+        "bind" -> respond [("bind","OK.")]
+        _      -> respond $ errorResponse result
+
+-- | Either evaluate an expression or bind a top-level variable.
+evalOrBind :: MVar Mueval -> String -> String -> MVar Bindings -> SessionM String
+evalOrBind mu path expr bindings
+  | HP.ParseOk decl <- HP.parseDecl expr = bind path decl bindings
+  | otherwise                            = eval mu path expr bindings
+
+-- | Bind a top-level declaration into the session state.
+bind :: String -> HS.Decl -> MVar Bindings -> SessionM String
+bind uid decl bindings = do
+  liftIO $ V.modifyMVar_ bindings (return . updateBindings uid decl)
+  return "bind"
+
+updateBindings :: String -> HS.Decl -> Bindings -> Bindings
+updateBindings uid decl = M.insertWith' update uid initial where
+  initial = HS.Let (HS.BDecls [decl]) unit
+  update _ = nestedBind decl
+
+-- | Nest a binding inside another let binding.
+nestedBind :: HS.Decl -- ^ A top-level declaration.
+           -> HS.Exp  -- ^ An expression.
+           -> HS.Exp  -- ^ An expresion with the decl nested inside it.
+nestedBind ds (HS.Let dss HS.Con{}) = HS.Let dss (HS.Let (HS.BDecls [ds]) unit)
+nestedBind ds (HS.Let dss inner)    = HS.Let dss (nestedBind ds inner)
+nestedBind _    expr                = expr
+
+-- | An expr with bindings.
+withBindings :: HS.Exp -- ^ Expression
+             -> HS.Exp -- ^ Bindings
+             -> HS.Exp -- ^ Expression with bindings in lexical context.
+withBindings e (HS.Let ds HS.Con{}) = HS.Let ds e
+withBindings e (HS.Let ds inner)    = HS.Let ds (withBindings e inner)
+withBindings e _                    = e
+
+unit :: HS.Exp
+unit = HS.Con (HS.Special HS.UnitCon)
 
 -- | Method: load
 --   Parameters: contents
@@ -186,13 +232,17 @@ run expr mueval' =
             return ret
 
 -- | Wrapper around the mueval function to ensure the session file is loaded.
-eval :: MVar Mueval -> String -> String -> SessionM String
-eval mvar path expr = liftIO $ do
+eval :: MVar Mueval -> String -> String -> MVar Bindings -> SessionM String
+eval mvar path expr bindings = liftIO $ do
+  bs <- fmap (M.lookup path) $ V.readMVar bindings
+  let exprWithBindings =
+        case HP.parseExp expr of
+          HP.ParseOk e     -> HPP.prettyPrint $ maybe e (withBindings e) bs
+          HP.ParseFailed{} -> expr
+      preparedEval arg = V.modifyMVar mvar (\mu -> do
+                           (mu',_) <- run arg mu
+                           run exprWithBindings mu')
   pathexists <- doesFileExist path
   if pathexists
-     then liftIO $ V.modifyMVar mvar $ \mu -> do
-            (mu',_) <- run (":l " ++ path) mu
-            run expr mu'
-     else liftIO $ V.modifyMVar mvar $ \mu -> do
-            (mu',_) <- run (":reset") mu
-            run expr mu'
+     then preparedEval (unwords [":l",path])
+     else preparedEval ":reset"

@@ -13,4 +13,5 @@ Executable haskell.json
   Main-Is: haskell-json.hs
   GHC-Options: -Wall -O2 -threaded
   Extensions: ScopedTypeVariables
-  Build-Depends: base > 4, fastcgi, cgi-utils, mtl, json, directory, process, haskell-src-exts
+  Build-Depends: base > 4, fastcgi, cgi-utils, mtl, json, directory, process,
+                 haskell-src-exts, containers
