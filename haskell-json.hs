@@ -27,6 +27,7 @@ import System.IO                              as IO
 import System.Directory                       (doesFileExist)
 import System.Environment                     (getEnvironment)
 import Text.JSON.Generic                      (encodeJSON)
+import Data.List (nub)
 
 -- | FastCGI response stuff.
 main :: IO ()
@@ -162,7 +163,7 @@ validToplevelExprs :: String -> Either String String
 validToplevelExprs expr = do
   let r = HP.parseModuleWithMode HP.defaultParseMode
                                 { HP.parseFilename = "Try Haskell Source" }
-                                ("module TryHaskell where\n" ++ expr)
+                                ("module TryHaskell where\n" ++ unlines (map ("import "++) dmodules) ++ "\n" ++ expr)
   case r of
     HP.ParseFailed{} -> Left "Parse failed."
     HP.ParseOk (HS.Module loc mn _ _ _ (filterImports -> imports) decls) ->
@@ -180,14 +181,28 @@ validToplevelExprs expr = do
                HS.TypeDecl{} -> True
                HS.TypeSig{} -> True
                _ -> False
-         filterImports = filter ((`elem` (map HS.ModuleName) allowedModules) . HS.importModule)
+         filterImports = nub .
+                             filter ((`elem` (map HS.ModuleName) allowedModules) . HS.importModule)
 	 allowedModules =
+	   dmodules ++
 	   ["Control.Monad.ST"
 	   ,"Control.Monad.State"
 	   ,"Control.Monad.Reader"
 	   ,"Data.STRef"
 	   ,"Control.Monad.ST.Lazy"
 	   ,"Control.Monad.ST.Strict"]
+
+dmodules = ["Prelude"
+           ,"Control.Monad"
+           ,"Control.Monad.Fix"
+	   ,"Control.Monad.State"
+	   ,"Control.Monad.Reader"
+	   ,"Data.STRef"
+           ,"Data.Char","Data.Ord"
+           ,"Data.Function"
+           ,"Data.Maybe"
+           ,"Data.List",
+            "Graphics.Raphael"]
 
 -- | Convert a mueval error to a JSON response.
 errorResponse :: String -> [(String,String)]
