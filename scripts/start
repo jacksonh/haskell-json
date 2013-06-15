@@ -1,0 +1,12 @@
+#! /bin/bash
+
+cd /home/chris/tryhaskell/haskell-json
+
+source .hsenv/bin/activate
+
+export MUEVAL_CORE=mueval-core
+export TMPDIR=/tmp/haskell-json/ghc/
+mkdir -p /tmp/haskell-json/load
+mkdir -p /tmp/haskell-json/ghc
+
+spawn-fcgi -n -p 9002 -P haskell-json.pid dist/build/haskell.json/haskell.json
