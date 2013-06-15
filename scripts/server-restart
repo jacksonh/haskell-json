@@ -1,4 +1,4 @@
-cd /home/chris/haskell-json
+cd /home/chris/tryhaskell/haskell-json
 
 source .hsenv/bin/activate
 
