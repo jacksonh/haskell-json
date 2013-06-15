@@ -28,6 +28,7 @@ import System.Directory                       (doesFileExist)
 import System.Environment                     (getEnvironment)
 import Text.JSON.Generic                      (encodeJSON)
 import Data.List (nub)
+import System.Directory
 
 -- | FastCGI response stuff.
 main :: IO ()
@@ -201,8 +202,7 @@ dmodules = ["Prelude"
            ,"Data.Char","Data.Ord"
            ,"Data.Function"
            ,"Data.Maybe"
-           ,"Data.List",
-            "Graphics.Raphael"]
+           ,"Data.List"]
 
 -- | Convert a mueval error to a JSON response.
 errorResponse :: String -> [(String,String)]
@@ -223,7 +223,7 @@ readMay s = case [x | (x,t) <- reads s, ("","") <- lex t] of
 -- | Generate a filename from the user's session id.
 sessionFile :: Maybe String -> SessionM String
 sessionFile guid = do
-  dir <- lift $ (++"/res/") . maybe "" id <$> CGI.getVar "DOCUMENT_ROOT"
+  dir <- fmap (++ "../load/") (liftIO getTemporaryDirectory)
   (dir++) . (++".hs") . (++guid') . show <$> CGIS.sessionId
       where guid' = maybe "" (takeWhile valid) guid
             valid c = isLetter c || isDigit c

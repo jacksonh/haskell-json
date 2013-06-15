@@ -1,0 +1,3 @@
+logger -t haskell-json "Cleaning temporary files"
+rm /tmp/haskell-json/ghc/* -rf
+rm /tmp/haskell-json/load/* -f
